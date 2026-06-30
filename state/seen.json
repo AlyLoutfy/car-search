@@ -1,6 +1,18 @@
 {
   "seat-leon": {
-    "contactcars": [],
+    "contactcars": [
+      "contactcars:f9162d70a789",
+      "contactcars:56974b08ee03",
+      "contactcars:68a7445a589f",
+      "contactcars:c652e7d5dc4b",
+      "contactcars:390183ff9cc1",
+      "contactcars:618b3eacba82",
+      "contactcars:00910354f0cc",
+      "contactcars:724a3a141eca",
+      "contactcars:1d8af7875bc3",
+      "contactcars:58852ccad68a",
+      "contactcars:55a941701d12"
+    ],
     "dubizzle": [
       "dubizzle:208239498",
       "dubizzle:208204439",
