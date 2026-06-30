@@ -14,7 +14,7 @@ Currently tracks **SEAT Leon · 900k–1.51M EGP · ≤90k km** across:
 ## How it works
 
 ```
-GitHub Actions cron (every ~20 min)
+GitHub Actions cron (every 2 hours)
         │
         ▼
   fetch each site  ──►  parse listings  ──►  diff against state/seen.json
@@ -74,7 +74,7 @@ npm start                # first run seeds silently; you'll get alerts on later 
 3. **Settings → Actions → General → Workflow permissions** → enable **Read and write permissions**
    (so the job can commit `state/seen.json` back).
 4. The workflow [`.github/workflows/car-search.yml`](.github/workflows/car-search.yml) runs every
-   ~20 minutes automatically. You can also trigger it manually from the **Actions** tab
+   2 hours automatically. You can also trigger it manually from the **Actions** tab
    (**Run workflow**).
 
 The first scheduled run seeds the state (no alerts). After that, you get a Telegram message for each
@@ -121,8 +121,9 @@ more sites:
 - **Jina is a free third-party dependency.** If it's slow or rate-limited, a run logs a warning and
   skips that site (no crash); the next run retries. Add `JINA_API_KEY` for higher limits.
 - **GitHub cron caveats.** Scheduled runs can be delayed under load, and GitHub auto-disables
-  schedules after ~60 days of no repo activity (the state commits keep it active). Minimum useful
-  interval is ~15 min.
+  schedules after ~60 days of no repo activity (the state commits keep it active). The schedule is
+  set to every 2 hours (`0 */2 * * *`) to keep Jina token usage low; tighten it in
+  [`.github/workflows/car-search.yml`](.github/workflows/car-search.yml) if you want fresher checks.
 
 ## Project layout
 

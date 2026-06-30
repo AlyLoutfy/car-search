@@ -2,8 +2,9 @@ name: car-search
 
 on:
   schedule:
-    # Every 20 minutes. GitHub may delay scheduled runs under load; this is best-effort.
-    - cron: '*/20 * * * *'
+    # Every 2 hours (keeps Jina token usage low; 2h freshness is plenty for car hunting).
+    # GitHub may delay scheduled runs under load; this is best-effort.
+    - cron: '0 */2 * * *'
   workflow_dispatch: {} # allow manual runs from the Actions tab
 
 # Prevent overlapping runs from racing on the committed state file.
