@@ -1,0 +1,9 @@
+node_modules/
+dist/
+.env
+.env.local
+*.log
+.DS_Store
+
+# NOTE: state/seen.json is intentionally NOT ignored — it is the dedup memory
+# and must be committed back by the GitHub Action so listings are never re-alerted.

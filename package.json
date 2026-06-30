@@ -1,0 +1,26 @@
+{
+  "name": "car-search",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Monitor Egyptian car-listing sites and send a Telegram alert when a new matching car is posted.",
+  "scripts": {
+    "start": "tsx src/run.ts",
+    "dry-run": "DRY_RUN=1 tsx src/run.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.8.3",
+    "vitest": "^2.1.8"
+  }
+}
