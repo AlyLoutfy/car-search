@@ -2,6 +2,10 @@ export interface FetchOptions {
   readonly jinaApiKey?: string;
   readonly timeoutMs?: number;
   readonly retries?: number;
+  /** Ask Jina for raw HTML instead of rendered markdown (needed to read embedded SSR data). */
+  readonly returnFormat?: 'markdown' | 'html';
+  /** Bypass Jina's cache — a monitor must always read the current page. */
+  readonly noCache?: boolean;
 }
 
 const BROWSER_USER_AGENT =
@@ -68,6 +72,12 @@ export function fetchViaJina(url: string, options: FetchOptions = {}): Promise<s
   const headers: Record<string, string> = { 'User-Agent': BROWSER_USER_AGENT };
   if (options.jinaApiKey) {
     headers.Authorization = `Bearer ${options.jinaApiKey}`;
+  }
+  if (options.returnFormat === 'html') {
+    headers['X-Return-Format'] = 'html';
+  }
+  if (options.noCache) {
+    headers['X-No-Cache'] = 'true';
   }
   return withRetry(
     () => fetchText(`https://r.jina.ai/${url}`, headers, options.timeoutMs ?? 45_000),

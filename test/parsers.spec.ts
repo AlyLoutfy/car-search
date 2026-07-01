@@ -10,23 +10,33 @@ const fixtures = resolve(dirname(fileURLToPath(import.meta.url)), 'fixtures');
 const read = (name: string): string => readFileSync(resolve(fixtures, name), 'utf8');
 
 describe('parseDubizzle', () => {
-  const listings = parseDubizzle(read('dubizzle.jina.md'));
+  const listings = parseDubizzle(read('dubizzle.html'));
+  const byKey = (key: string) => listings.find((listing) => listing.key === key);
 
-  it('extracts listings keyed by the stable ad ID', () => {
-    expect(listings.length).toBeGreaterThan(0);
+  it('extracts every matching ad, keyed by the stable numeric id', () => {
     expect(listings.every((listing) => /^dubizzle:\d+$/.test(listing.key))).toBe(true);
+    expect(new Set(listings.map((l) => l.key)).size).toBe(listings.length); // deduped
   });
 
-  it('finds a known SEAT Leon ad and builds its canonical URL', () => {
-    const known = listings.find((listing) => listing.key === 'dubizzle:208239498');
-    expect(known).toBeDefined();
-    expect(known?.url).toBe('https://www.dubizzle.com.eg/en/ad/seat-leon-2020-ID208239498');
-    expect(known?.title.toLowerCase()).toContain('leon');
+  it('includes an ad present only in the ad_ids backstop (never misses a listing)', () => {
+    // 208999999 has no card, only appears in the analytics ad_ids array.
+    const keys = listings.map((listing) => listing.key).sort();
+    expect(keys).toEqual([
+      'dubizzle:208149106',
+      'dubizzle:208239498',
+      'dubizzle:208274361',
+      'dubizzle:208999999',
+    ]);
   });
 
-  it('deduplicates repeated occurrences of the same ad', () => {
-    const keys = listings.map((listing) => listing.key);
-    expect(new Set(keys).size).toBe(keys.length);
+  it('builds a "Seat Leon <year>" title and a resolvable /ad/<id> link', () => {
+    expect(byKey('dubizzle:208239498')?.title).toBe('Seat Leon 2020'); // year from href
+    expect(byKey('dubizzle:208274361')?.title).toBe('Seat Leon 2022'); // year from encoded href
+    expect(byKey('dubizzle:208149106')?.title).toBe('Seat Leon'); // Arabic-numeral year -> no year
+    expect(byKey('dubizzle:208999999')?.title).toBe('Seat Leon'); // backstop-only, no card
+    expect(byKey('dubizzle:208239498')?.url).toBe('https://www.dubizzle.com.eg/ad/208239498');
+    // Titles always contain "Leon" so the keyword filter keeps Arabic-listed ads.
+    expect(listings.every((l) => l.title.toLowerCase().includes('leon'))).toBe(true);
   });
 });
 

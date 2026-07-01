@@ -9,12 +9,25 @@ import { applyFilters } from './filters';
 interface SiteAdapter {
   /** A token that must appear in a genuine results page (used to reject broken/challenge pages). */
   readonly pageMarker: string;
-  readonly parse: (markdown: string) => Listing[];
+  readonly parse: (content: string) => Listing[];
+  /** Ask Jina for raw HTML instead of markdown (Dubizzle's full ad list lives in embedded HTML). */
+  readonly returnFormat?: 'markdown' | 'html';
+  /** Always fetch fresh (a monitor must not read a cached page). */
+  readonly noCache?: boolean;
+  /** Fetch without the Jina API key. HTML mode returns megabytes, which would burn keyed tokens;
+   *  keyless is free and 1 request / 2h is far under the anonymous rate limit. */
+  readonly keyless?: boolean;
 }
 
 const ADAPTERS: Record<SiteId, SiteAdapter> = {
   contactcars: { pageMarker: 'contactcars.com', parse: parseContactCars },
-  dubizzle: { pageMarker: 'dubizzle.com.eg', parse: parseDubizzle },
+  dubizzle: {
+    pageMarker: 'dubizzle.com.eg',
+    parse: parseDubizzle,
+    returnFormat: 'html',
+    noCache: true,
+    keyless: true,
+  },
   sylndr: { pageMarker: 'sylndr.com', parse: parseSylndr },
 };
 
@@ -53,8 +66,14 @@ export async function collectSource(
   source: SearchSource,
   env: AppEnv,
 ): Promise<Listing[]> {
-  const markdown = await fetchViaJina(source.url, { jinaApiKey: env.jinaApiKey });
-  assertResultsPage(source.site, markdown);
-  const listings = ADAPTERS[source.site].parse(markdown);
+  const adapter = ADAPTERS[source.site];
+  const content = await fetchViaJina(source.url, {
+    jinaApiKey: adapter.keyless ? undefined : env.jinaApiKey,
+    returnFormat: adapter.returnFormat,
+    noCache: adapter.noCache,
+    timeoutMs: adapter.returnFormat === 'html' ? 70_000 : undefined,
+  });
+  assertResultsPage(source.site, content);
+  const listings = adapter.parse(content);
   return applyFilters(listings, search.filters);
 }
