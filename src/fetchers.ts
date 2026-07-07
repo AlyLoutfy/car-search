@@ -2,8 +2,8 @@ export interface FetchOptions {
   readonly jinaApiKey?: string;
   readonly timeoutMs?: number;
   readonly retries?: number;
-  /** Ask Jina for raw HTML instead of rendered markdown (needed to read embedded SSR data). */
-  readonly returnFormat?: 'markdown' | 'html';
+  /** Override Jina's output: 'html' for embedded SSR data, 'text' to pass a JSON API through raw. */
+  readonly returnFormat?: 'markdown' | 'html' | 'text';
   /** Bypass Jina's cache — a monitor must always read the current page. */
   readonly noCache?: boolean;
 }
@@ -73,8 +73,8 @@ export function fetchViaJina(url: string, options: FetchOptions = {}): Promise<s
   if (options.jinaApiKey) {
     headers.Authorization = `Bearer ${options.jinaApiKey}`;
   }
-  if (options.returnFormat === 'html') {
-    headers['X-Return-Format'] = 'html';
+  if (options.returnFormat === 'html' || options.returnFormat === 'text') {
+    headers['X-Return-Format'] = options.returnFormat;
   }
   if (options.noCache) {
     headers['X-No-Cache'] = 'true';
