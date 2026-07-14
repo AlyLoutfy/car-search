@@ -3,7 +3,6 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
 import type { SearchConfig } from './types';
-import type { NikeWatch } from './nike/product-feed';
 
 const siteSchema = z.enum(['contactcars', 'dubizzle', 'sylndr']);
 
@@ -30,23 +29,6 @@ export function loadSearches(path = resolve(repoRoot, 'config/searches.json')): 
   const raw = readFileSync(path, 'utf8');
   const parsed: unknown = JSON.parse(raw);
   return searchesSchema.parse(parsed);
-}
-
-const nikeWatchSchema = z.object({
-  label: z.string().min(1),
-  productUrl: z.string().url(),
-  styleColor: z.string().min(1),
-  marketplace: z.string().min(1),
-  language: z.string().min(1),
-  sizes: z.array(z.string().min(1)).min(1),
-});
-
-const nikeWatchesSchema = z.array(nikeWatchSchema).min(1);
-
-export function loadNikeWatches(path = resolve(repoRoot, 'config/nike-watches.json')): NikeWatch[] {
-  const raw = readFileSync(path, 'utf8');
-  const parsed: unknown = JSON.parse(raw);
-  return nikeWatchesSchema.parse(parsed);
 }
 
 export interface AppEnv {

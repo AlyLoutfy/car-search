@@ -7,8 +7,6 @@
   "scripts": {
     "start": "tsx src/run.ts",
     "dry-run": "DRY_RUN=1 tsx src/run.ts",
-    "nike": "tsx src/nike-watch.ts",
-    "nike:dry": "DRY_RUN=1 tsx src/nike-watch.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
