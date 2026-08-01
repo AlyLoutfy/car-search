@@ -7,7 +7,8 @@ import { applyFilters } from './filters';
 interface SiteAdapter {
   /** A token that must appear in a genuine results page (used to reject broken/challenge pages). */
   readonly pageMarker: string;
-  readonly parse: (content: string) => Listing[];
+  /** `sourceUrl` is the search URL the content came from; parsers may use it for make/model. */
+  readonly parse: (content: string, sourceUrl: string) => Listing[];
   /** Override the request timeout — a full listings page can be several MB. */
   readonly timeoutMs?: number;
 }
@@ -57,6 +58,6 @@ export async function collectSource(
   const adapter = ADAPTERS[source.site];
   const content = await fetchDirect(source.url, { timeoutMs: adapter.timeoutMs });
   assertResultsPage(source.site, content);
-  const listings = adapter.parse(content);
+  const listings = adapter.parse(content, source.url);
   return applyFilters(listings, search.filters);
 }

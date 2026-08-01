@@ -22,8 +22,13 @@ function formatPrice(priceEgp: number | null): string {
 
 /** Build the Telegram HTML message for a newly-found listing. */
 export function formatListingMessage(search: SearchConfig, listing: Listing): string {
+  // Telegram previews the FIRST link in a message, so a zero-width anchor on the thumbnail puts
+  // the car's photo above the text. Invisible when there is no image to show.
+  const photo = listing.imageUrl
+    ? `<a href="${escapeHtml(listing.imageUrl)}">&#8203;</a>`
+    : '';
   return [
-    `🚗 <b>New match — ${escapeHtml(search.label)}</b>`,
+    `${photo}🚗 <b>New match — ${escapeHtml(search.label)}</b>`,
     `<b>${escapeHtml(listing.title)}</b>`,
     `💰 ${formatPrice(listing.priceEgp)}  ·  📍 ${SITE_LABELS[listing.site]}`,
     `🔗 <a href="${escapeHtml(listing.url)}">View listing</a>`,
