@@ -30,6 +30,18 @@ describe('formatListingMessage', () => {
     expect(formatListingMessage(search, { ...listing, priceEgp: null })).toContain('Price N/A');
   });
 
+  it('leads with a zero-width link to the thumbnail so Telegram shows the car photo', () => {
+    const image = 'https://images.dubizzle.com.eg/thumbnails/178635000-600x450.webp';
+    const message = formatListingMessage(search, { ...listing, imageUrl: image });
+    // Must be the first link in the text — Telegram previews whichever link comes first.
+    expect(message.indexOf(image)).toBeLessThan(message.indexOf(listing.url));
+    expect(message).toContain(`<a href="${image}">&#8203;</a>`);
+  });
+
+  it('omits the photo anchor entirely when there is no image', () => {
+    expect(formatListingMessage(search, listing)).not.toContain('&#8203;');
+  });
+
   it('HTML-escapes a malicious title so it cannot break the message markup', () => {
     const message = formatListingMessage(search, {
       ...listing,

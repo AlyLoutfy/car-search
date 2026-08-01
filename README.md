@@ -108,10 +108,18 @@ more sites:
 
 ## Limitations & maintenance
 
+- **Price filtering depends on the site's structured data.** Dubizzle embeds schema.org JSON-LD
+  (price, brand, model, year, thumbnail) for each ad, so `priceMin`/`priceMax` are enforced — its
+  search URL filters mileage but *not* price, so this client-side band is what keeps an
+  out-of-budget car from alerting you. Any ad the structured data misses keeps a `null` price and
+  is surfaced anyway, on the principle that a listing you didn't want beats a listing you missed.
 - **Sylndr price isn't filtered.** Its page mixes financing/down-payment figures with
   asking prices, so a parsed number would be unreliable — and a wrong price could hide a real car.
   Sylndr listings are surfaced regardless of price (you click through to check). Its search URL
   doesn't price-filter either, so this is consistent.
+- **Titles are normalised to Latin script**, built from the structured brand/model/year rather than
+  the seller's headline. Roughly a third of Egyptian ads are titled in Arabic ("سيات ليون 2024"),
+  and `titleMustInclude: ["leon"]` would silently drop every one of them.
 - **Scraping is inherently brittle.** If a site changes its markup, that site's parser may need a
   tweak — the parsers are small and isolated in `src/parsers/`, each backed by a fixture test in
   `test/`. The page-shape check and the "whole page looks new → resync silently" guard mean a
