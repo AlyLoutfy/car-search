@@ -30,7 +30,7 @@ function titleFor(id: string, cardTitle: string | undefined, href: string | unde
   return year ? `Seat Leon ${year}` : 'Seat Leon';
 }
 
-/** Parse Dubizzle listings from the full page HTML (direct fetch or Jina html mode). */
+/** Parse Dubizzle listings from the full page HTML. */
 export function parseDubizzle(html: string): Listing[] {
   const cardTitleById = new Map<string, string>();
   const cardHrefById = new Map<string, string>();

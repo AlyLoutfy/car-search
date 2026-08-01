@@ -2,9 +2,9 @@ name: car-search
 
 on:
   schedule:
-    # Every 2 hours (keeps Jina token usage low; 2h freshness is plenty for car hunting).
-    # GitHub may delay scheduled runs under load; this is best-effort.
-    - cron: '0 */2 * * *'
+    # Every hour. Fetches go straight to the sites now — nothing metered to conserve — so the only
+    # cost is a runner minute. GitHub may delay scheduled runs under load; this is best-effort.
+    - cron: '0 * * * *'
   workflow_dispatch: {} # allow manual runs from the Actions tab
 
 # Prevent overlapping runs from racing on the committed state file.
@@ -32,7 +32,6 @@ jobs:
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-          JINA_API_KEY: ${{ secrets.JINA_API_KEY }}
         run: npm start
 
       - name: Persist seen state

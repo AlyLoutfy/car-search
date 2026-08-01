@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
 import type { SearchConfig } from './types';
 
-const siteSchema = z.enum(['contactcars', 'dubizzle', 'sylndr']);
+const siteSchema = z.enum(['dubizzle', 'sylndr']);
 
 const searchSchema = z.object({
   id: z.string().min(1),
@@ -34,7 +34,6 @@ export function loadSearches(path = resolve(repoRoot, 'config/searches.json')): 
 export interface AppEnv {
   readonly telegramBotToken: string;
   readonly telegramChatId: string;
-  readonly jinaApiKey?: string;
   readonly dryRun: boolean;
 }
 
@@ -49,10 +48,5 @@ export function loadEnv(): AppEnv {
     );
   }
 
-  return {
-    telegramBotToken,
-    telegramChatId,
-    jinaApiKey: process.env.JINA_API_KEY || undefined,
-    dryRun,
-  };
+  return { telegramBotToken, telegramChatId, dryRun };
 }

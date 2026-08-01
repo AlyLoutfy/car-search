@@ -1,7 +1,5 @@
-import type { AppEnv } from './config';
 import type { Listing, SearchConfig, SearchSource, SiteId } from './types';
-import { fetchViaJina } from './fetchers';
-import { parseContactCars } from './parsers/contactcars';
+import { fetchDirect } from './fetchers';
 import { parseDubizzle } from './parsers/dubizzle';
 import { parseSylndr } from './parsers/sylndr';
 import { applyFilters } from './filters';
@@ -10,24 +8,15 @@ interface SiteAdapter {
   /** A token that must appear in a genuine results page (used to reject broken/challenge pages). */
   readonly pageMarker: string;
   readonly parse: (content: string) => Listing[];
-  /** Ask Jina for raw HTML instead of markdown (Dubizzle's full ad list lives in embedded HTML). */
-  readonly returnFormat?: 'markdown' | 'html';
-  /** Always fetch fresh (a monitor must not read a cached page). */
-  readonly noCache?: boolean;
-  /** Fetch without the Jina API key. HTML mode returns megabytes, which would burn keyed tokens;
-   *  keyless is free and 1 request / 2h is far under the anonymous rate limit. */
-  readonly keyless?: boolean;
+  /** Override the request timeout — a full listings page can be several MB. */
+  readonly timeoutMs?: number;
 }
 
 const ADAPTERS: Record<SiteId, SiteAdapter> = {
-  contactcars: { pageMarker: 'contactcars.com', parse: parseContactCars },
-  dubizzle: {
-    pageMarker: 'dubizzle.com.eg',
-    parse: parseDubizzle,
-    returnFormat: 'html',
-    noCache: true,
-    keyless: true,
-  },
+  // Dubizzle server-renders its ad cards and the complete "ad_ids" arrays into the page HTML,
+  // so a plain request returns everything a headless-browser proxy would — at no cost.
+  dubizzle: { pageMarker: 'dubizzle.com.eg', parse: parseDubizzle, timeoutMs: 70_000 },
+  // Sylndr server-renders one anchor per matching car; the un-hydrated HTML is the full result set.
   sylndr: { pageMarker: 'sylndr.com', parse: parseSylndr },
 };
 
@@ -42,7 +31,7 @@ const CHALLENGE_MARKERS = [
 ];
 
 /**
- * Reject a response that does not look like a real results page, so a broken fetch (empty Jina
+ * Reject a response that does not look like a real results page, so a broken fetch (truncated
  * reply, Cloudflare challenge, site outage returning HTTP 200) is treated as a failure to retry —
  * never as a legitimately-empty result that would seed an empty set or trigger a mass re-alert.
  */
@@ -64,15 +53,9 @@ export function assertResultsPage(site: SiteId, markdown: string): void {
 export async function collectSource(
   search: SearchConfig,
   source: SearchSource,
-  env: AppEnv,
 ): Promise<Listing[]> {
   const adapter = ADAPTERS[source.site];
-  const content = await fetchViaJina(source.url, {
-    jinaApiKey: adapter.keyless ? undefined : env.jinaApiKey,
-    returnFormat: adapter.returnFormat,
-    noCache: adapter.noCache,
-    timeoutMs: adapter.returnFormat === 'html' ? 70_000 : undefined,
-  });
+  const content = await fetchDirect(source.url, { timeoutMs: adapter.timeoutMs });
   assertResultsPage(source.site, content);
   const listings = adapter.parse(content);
   return applyFilters(listings, search.filters);

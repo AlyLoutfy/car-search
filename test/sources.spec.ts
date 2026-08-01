@@ -6,7 +6,7 @@ const padded = (marker: string, extra = ''): string =>
 
 describe('assertResultsPage', () => {
   it('accepts a plausible results page', () => {
-    expect(() => assertResultsPage('contactcars', padded('contactcars.com listing EGP'))).not.toThrow();
+    expect(() => assertResultsPage('dubizzle', padded('dubizzle.com.eg ad EGP'))).not.toThrow();
   });
 
   it('rejects a too-short response (failed/empty fetch)', () => {
@@ -20,8 +20,8 @@ describe('assertResultsPage', () => {
   });
 
   it('rejects a Cloudflare challenge page even if it mentions the site', () => {
-    expect(() => assertResultsPage('contactcars', padded('contactcars.com', 'Just a moment cf-chl'))).toThrow(
-      /bot-challenge/,
-    );
+    expect(() =>
+      assertResultsPage('dubizzle', padded('dubizzle.com.eg', 'Just a moment cf-chl')),
+    ).toThrow(/bot-challenge/);
   });
 });

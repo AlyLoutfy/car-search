@@ -7,18 +7,17 @@ Currently tracks **SEAT Leon · 900k–1.51M EGP · ≤90k km** across:
 
 | Site | How it's fetched | Notes |
 |------|------------------|-------|
-| [ContactCars](https://www.contactcars.com) | Jina reader proxy | Behind Cloudflare; the proxy renders it for us |
-| [Dubizzle](https://www.dubizzle.com.eg) | Jina reader proxy | Stable ad IDs → reliable dedup |
-| [Sylndr](https://sylndr.com) | Jina reader proxy | Dealer stock; price not filtered (see Limitations) |
+| [Dubizzle](https://www.dubizzle.com.eg) | Direct HTTPS request | Stable ad IDs → reliable dedup |
+| [Sylndr](https://sylndr.com) | Direct HTTPS request | Supported, not currently in the search config |
 
 ## How it works
 
 ```
-GitHub Actions cron (every 2 hours)
+GitHub Actions cron (hourly)
         │
         ▼
   fetch each site  ──►  parse listings  ──►  diff against state/seen.json
-  (via r.jina.ai)       (per-site parser)    (only genuinely NEW ones)
+  (direct request)      (per-site parser)    (only genuinely NEW ones)
         │                                            │
         │                                            ▼
         │                                    send a Telegram message
@@ -26,9 +25,10 @@ GitHub Actions cron (every 2 hours)
   commit updated state/seen.json  ◄──────────────────┘
 ```
 
-- **Why a proxy?** ContactCars and Dubizzle block datacenter IPs (Cloudflare) with a `403`. The
-  [Jina reader](https://jina.ai/reader) (`https://r.jina.ai/<url>`) renders the page server-side and
-  returns clean markdown, which gets us past Cloudflare from a GitHub runner for free.
+- **No third-party fetching service.** Both sites server-render their listings into the initial
+  HTML, so a plain request returns everything a headless-browser proxy would. There is no API key
+  to expire, no token quota to exhaust, and nothing to pay for. This project previously proxied
+  through [Jina reader](https://jina.ai/reader); that dependency is gone.
 - **No duplicate alerts.** `state/seen.json` remembers every listing key we've already seen (the
   site's own stable listing ID). The GitHub Action commits it back after each run, so memory
   survives across runs. A listing is only marked seen once its alert has actually been delivered —
@@ -70,11 +70,12 @@ npm start                # first run seeds silently; you'll get alerts on later 
 2. **Settings → Secrets and variables → Actions → New repository secret**, add:
    - `TELEGRAM_BOT_TOKEN`
    - `TELEGRAM_CHAT_ID`
-   - `JINA_API_KEY` *(optional — only if you hit Jina rate limits; get one at jina.ai/reader)*
+
+   Those two are the only secrets the workflow needs.
 3. **Settings → Actions → General → Workflow permissions** → enable **Read and write permissions**
    (so the job can commit `state/seen.json` back).
-4. The workflow [`.github/workflows/car-search.yml`](.github/workflows/car-search.yml) runs every
-   2 hours automatically. You can also trigger it manually from the **Actions** tab
+4. The workflow [`.github/workflows/car-search.yml`](.github/workflows/car-search.yml) runs
+   hourly automatically. You can also trigger it manually from the **Actions** tab
    (**Run workflow**).
 
 The first scheduled run seeds the state (no alerts). After that, you get a Telegram message for each
@@ -95,21 +96,19 @@ more sites:
     "titleMustInclude": ["leon"]                  // each keyword must appear in title or URL
   },
   "sources": [
-    { "site": "contactcars", "url": "https://www.contactcars.com/en/cars?...&query=seat+leon&..." },
-    { "site": "dubizzle",    "url": "https://www.dubizzle.com.eg/en/vehicles/cars-for-sale/used/seat/model-leon/?filter=mileage_max_90000" },
-    { "site": "sylndr",      "url": "https://sylndr.com/en/buy-cars/egypt/used-cars/seat/leon" }
+    { "site": "dubizzle", "url": "https://www.dubizzle.com.eg/en/vehicles/cars-for-sale/used/seat/model-leon/?filter=mileage_max_90000" }
   ]
 }
 ```
 
 - Build each `url` by applying the filters **on the site itself** (price, mileage, model), then
   copying the resulting URL. The site does the heavy filtering; `filters` is a client-side safety net.
-- To track a different car, add a new object with a new `id` and the three site URLs for that car.
-- `site` must be one of: `contactcars`, `dubizzle`, `sylndr`.
+- To track a different car, add a new object with a new `id` and a source URL per site.
+- `site` must be one of: `dubizzle`, `sylndr`.
 
 ## Limitations & maintenance
 
-- **Sylndr price isn't filtered.** Its reader output mixes financing/down-payment figures with
+- **Sylndr price isn't filtered.** Its page mixes financing/down-payment figures with
   asking prices, so a parsed number would be unreliable — and a wrong price could hide a real car.
   Sylndr listings are surfaced regardless of price (you click through to check). Its search URL
   doesn't price-filter either, so this is consistent.
@@ -118,11 +117,14 @@ more sites:
   `test/`. The page-shape check and the "whole page looks new → resync silently" guard mean a
   breakage fails safe (missed alerts for a while) rather than spamming you. Run `npm run dry-run` to
   see what each site currently returns. (Dry-run previews only — it never writes `state/seen.json`.)
-- **Jina is a free third-party dependency.** If it's slow or rate-limited, a run logs a warning and
-  skips that site (no crash); the next run retries. Add `JINA_API_KEY` for higher limits.
+- **A site can start blocking us.** Fetches go straight to the site, so a Cloudflare challenge or
+  an outage shows up as a warning and that site is skipped for the run (no crash, state untouched);
+  the next run retries. ContactCars was dropped for exactly this reason — it sits behind a
+  Cloudflare block *and* its `robots.txt` disallows `/en/cars`, so there is no legitimate way to
+  read it automatically. Use its own on-site saved-search alerts if you want that coverage.
 - **GitHub cron caveats.** Scheduled runs can be delayed under load, and GitHub auto-disables
   schedules after ~60 days of no repo activity (the state commits keep it active). The schedule is
-  set to every 2 hours (`0 */2 * * *`) to keep Jina token usage low; tighten it in
+  set to hourly (`0 * * * *`); nothing is metered, so tighten it in
   [`.github/workflows/car-search.yml`](.github/workflows/car-search.yml) if you want fresher checks.
 
 ## Project layout
@@ -133,7 +135,7 @@ src/
   run.ts                 orchestrator: fetch → reconcile → notify → save state
   reconcile.ts           pure seed/diff/resync + persist-on-delivery logic (unit-tested)
   sources.ts             maps each site to its parser; validates the page looks real
-  fetchers.ts            Jina reader fetch with retry/backoff
+  fetchers.ts            direct page fetch with retry/backoff
   parsers/               one small parser per site (+ shared helpers)
   filters.ts             client-side price / keyword narrowing
   state.ts               load/save/merge seen.json (dedup memory; never evicts live keys)
