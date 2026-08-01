@@ -3,7 +3,6 @@ import type { Listing, SearchConfig, SiteId } from './types';
 import { sendTelegramMessage } from './telegram';
 
 const SITE_LABELS: Record<SiteId, string> = {
-  contactcars: 'ContactCars',
   dubizzle: 'Dubizzle',
   sylndr: 'Sylndr',
 };

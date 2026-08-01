@@ -1,11 +1,6 @@
 export interface FetchOptions {
-  readonly jinaApiKey?: string;
   readonly timeoutMs?: number;
   readonly retries?: number;
-  /** Override Jina's output: 'html' for embedded SSR data, 'text' to pass a JSON API through raw. */
-  readonly returnFormat?: 'markdown' | 'html' | 'text';
-  /** Bypass Jina's cache — a monitor must always read the current page. */
-  readonly noCache?: boolean;
 }
 
 const BROWSER_USER_AGENT =
@@ -50,7 +45,13 @@ async function withRetry(
   throw lastError instanceof Error ? lastError : new Error(String(lastError));
 }
 
-/** Fetch a URL directly. Suitable for sites without bot protection (e.g. Sylndr). */
+/**
+ * Fetch a URL's raw HTML from the site itself.
+ *
+ * This is the only transport. It costs nothing, has no quota to exhaust and no key to expire, and
+ * always reflects the live page. It works because the sites we watch server-render their listings
+ * into the initial HTML — so there is nothing for a headless browser to add.
+ */
 export function fetchDirect(url: string, options: FetchOptions = {}): Promise<string> {
   return withRetry(
     () =>
@@ -59,28 +60,6 @@ export function fetchDirect(url: string, options: FetchOptions = {}): Promise<st
         { 'User-Agent': BROWSER_USER_AGENT, 'Accept-Language': 'en-US,en;q=0.9' },
         options.timeoutMs ?? 30_000,
       ),
-    options.retries ?? 2,
-  );
-}
-
-/**
- * Fetch a URL through the Jina reader proxy (https://r.jina.ai), which renders the page
- * server-side and returns clean markdown. This is how we get past Cloudflare on sites that
- * block datacenter IPs (ContactCars, Dubizzle) from a CI runner.
- */
-export function fetchViaJina(url: string, options: FetchOptions = {}): Promise<string> {
-  const headers: Record<string, string> = { 'User-Agent': BROWSER_USER_AGENT };
-  if (options.jinaApiKey) {
-    headers.Authorization = `Bearer ${options.jinaApiKey}`;
-  }
-  if (options.returnFormat === 'html' || options.returnFormat === 'text') {
-    headers['X-Return-Format'] = options.returnFormat;
-  }
-  if (options.noCache) {
-    headers['X-No-Cache'] = 'true';
-  }
-  return withRetry(
-    () => fetchText(`https://r.jina.ai/${url}`, headers, options.timeoutMs ?? 45_000),
     options.retries ?? 2,
   );
 }

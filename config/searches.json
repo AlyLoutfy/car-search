@@ -9,16 +9,8 @@
     },
     "sources": [
       {
-        "site": "contactcars",
-        "url": "https://www.contactcars.com/en/cars?status=3&query=seat+leon&priceTo=1510000&priceFrom=900000&model=184&page=1&sortBy=sortingDate&sortOrder=false"
-      },
-      {
         "site": "dubizzle",
         "url": "https://www.dubizzle.com.eg/en/vehicles/cars-for-sale/used/seat/model-leon/?filter=mileage_max_90000"
-      },
-      {
-        "site": "sylndr",
-        "url": "https://sylndr.com/en/buy-cars/egypt/used-cars/seat/leon"
       }
     ]
   }

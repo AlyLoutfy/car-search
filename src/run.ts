@@ -24,7 +24,7 @@ async function main(): Promise<void> {
       for (const source of search.sources) {
         let listings;
         try {
-          listings = await collectSource(search, source, env);
+          listings = await collectSource(search, source);
         } catch (error) {
           // Fetch/parse/validation failure: leave this source's state untouched and retry next run.
           console.warn(`⚠️  ${search.id}/${source.site}: ${(error as Error).message}`);

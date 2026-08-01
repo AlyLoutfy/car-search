@@ -1,4 +1,4 @@
-export type SiteId = 'contactcars' | 'dubizzle' | 'sylndr';
+export type SiteId = 'dubizzle' | 'sylndr';
 
 /** A single car listing, normalised across every source site. */
 export interface Listing {

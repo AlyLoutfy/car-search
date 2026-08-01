@@ -1,24 +1,5 @@
 {
   "seat-leon": {
-    "contactcars": [
-      "contactcars:11699341b830",
-      "contactcars:869535064e51",
-      "contactcars:f151a8d22d32",
-      "contactcars:f866b9e28ddd",
-      "contactcars:479434d19e86",
-      "contactcars:2c0679d17535",
-      "contactcars:f9162d70a789",
-      "contactcars:56974b08ee03",
-      "contactcars:68a7445a589f",
-      "contactcars:c652e7d5dc4b",
-      "contactcars:390183ff9cc1",
-      "contactcars:618b3eacba82",
-      "contactcars:00910354f0cc",
-      "contactcars:724a3a141eca",
-      "contactcars:1d8af7875bc3",
-      "contactcars:58852ccad68a",
-      "contactcars:55a941701d12"
-    ],
     "sylndr": [
       "sylndr:25f5aadd-3bf3-4d69-add2-e6380f10daa9",
       "sylndr:6ed95b26-a5c7-41e6-bc42-74c4a86626f4"
