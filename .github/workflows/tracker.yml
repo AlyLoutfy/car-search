@@ -1,15 +1,15 @@
-name: car-search
+name: listing-tracker
 
 on:
   schedule:
-    # Every hour. Fetches go straight to the sites now — nothing metered to conserve — so the only
-    # cost is a runner minute. GitHub may delay scheduled runs under load; this is best-effort.
+    # Every hour. Fetches go straight to the site — nothing metered to conserve — so the only cost
+    # is a runner minute. GitHub may delay scheduled runs under load; this is best-effort.
     - cron: '0 * * * *'
   workflow_dispatch: {} # allow manual runs from the Actions tab
 
 # Prevent overlapping runs from racing on the committed state file.
 concurrency:
-  group: car-search
+  group: listing-tracker
   cancel-in-progress: false
 
 permissions:
@@ -35,13 +35,23 @@ jobs:
         run: npm start
 
       - name: Persist seen state
+        # Also after a failed run: alerts already delivered before the failure are recorded in the
+        # state file, and dropping it would re-send them next hour.
+        if: ${{ !cancelled() }}
         run: |
           if [[ -n "$(git status --porcelain state/seen.json)" ]]; then
-            git config user.name "car-search-bot"
+            git config user.name "listing-tracker-bot"
             git config user.email "github-actions[bot]@users.noreply.github.com"
             git add state/seen.json
             git commit -m "chore: update seen listings [skip ci]"
-            git push
+            # main may have moved during the run (a config change, a merge): replay onto it rather
+            # than fail the push and lose this run's bookkeeping.
+            for attempt in 1 2 3; do
+              git pull --rebase --quiet && git push && exit 0
+              sleep $((attempt * 5))
+            done
+            echo "Could not push state after 3 attempts" >&2
+            exit 1
           else
             echo "No state changes to persist."
           fi

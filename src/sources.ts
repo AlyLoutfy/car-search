@@ -1,25 +1,45 @@
-import type { Listing, SearchConfig, SearchSource, SiteId } from './types';
+import type { Listing, ParsedPage } from './types';
 import { fetchDirect } from './fetchers';
-import { parseDubizzle } from './parsers/dubizzle';
-import { parseSylndr } from './parsers/sylndr';
-import { applyFilters } from './filters';
+import { dubizzlePageUrl, parseDubizzle } from './parsers/dubizzle';
 
 interface SiteAdapter {
+  readonly name: string;
   /** A token that must appear in a genuine results page (used to reject broken/challenge pages). */
   readonly pageMarker: string;
-  /** `sourceUrl` is the search URL the content came from; parsers may use it for make/model. */
-  readonly parse: (content: string, sourceUrl: string) => Listing[];
+  /** `sourceUrl` is the URL the content came from; parsers may use it for make/model. */
+  readonly parse: (content: string, sourceUrl: string) => ParsedPage;
+  /** The URL of page `page` (1-based) of the search at `url`. */
+  readonly pageUrl: (url: string, page: number) => string;
   /** Override the request timeout — a full listings page can be several MB. */
   readonly timeoutMs?: number;
 }
 
-const ADAPTERS: Record<SiteId, SiteAdapter> = {
-  // Dubizzle server-renders its ad cards and the complete "ad_ids" arrays into the page HTML,
-  // so a plain request returns everything a headless-browser proxy would — at no cost.
-  dubizzle: { pageMarker: 'dubizzle.com.eg', parse: parseDubizzle, timeoutMs: 70_000 },
-  // Sylndr server-renders one anchor per matching car; the un-hydrated HTML is the full result set.
-  sylndr: { pageMarker: 'sylndr.com', parse: parseSylndr },
+// Keyed by hostname (without "www."). To support another site, add a parser under src/parsers/
+// and register it here.
+const ADAPTERS: Record<string, SiteAdapter> = {
+  // Dubizzle (formerly OLX Egypt) server-renders every ad on the page — with its description — into
+  // the initial HTML, so a plain request returns everything a headless browser would.
+  'dubizzle.com.eg': {
+    name: 'Dubizzle',
+    pageMarker: 'dubizzle.com.eg',
+    parse: parseDubizzle,
+    pageUrl: dubizzlePageUrl,
+    timeoutMs: 70_000,
+  },
 };
+
+/** Stop following pagination here: a search this broad wants narrowing on the site itself. */
+const MAX_PAGES = 10;
+
+export function siteFor(url: string): SiteAdapter {
+  const host = new URL(url).hostname.replace(/^www\./, '');
+  const adapter = ADAPTERS[host];
+  if (!adapter) {
+    const supported = Object.keys(ADAPTERS).join(', ');
+    throw new Error(`${host} is not a supported site (supported: ${supported})`);
+  }
+  return adapter;
+}
 
 // Markers that mean we got a bot-challenge / error page rather than real content. A page like
 // this must NOT be parsed as "zero listings" — that would poison the seen-state.
@@ -36,28 +56,45 @@ const CHALLENGE_MARKERS = [
  * reply, Cloudflare challenge, site outage returning HTTP 200) is treated as a failure to retry —
  * never as a legitimately-empty result that would seed an empty set or trigger a mass re-alert.
  */
-export function assertResultsPage(site: SiteId, markdown: string): void {
-  const lower = markdown.toLowerCase();
-  if (markdown.length < 800) {
-    throw new Error(`${site}: response too short (${markdown.length} chars) — likely a failed fetch`);
+export function assertResultsPage(site: SiteAdapter, content: string): void {
+  const lower = content.toLowerCase();
+  if (content.length < 800) {
+    throw new Error(`${site.name}: response too short (${content.length} chars) — likely a failed fetch`);
   }
-  if (!lower.includes(ADAPTERS[site].pageMarker)) {
-    throw new Error(`${site}: response missing expected marker "${ADAPTERS[site].pageMarker}"`);
+  if (!lower.includes(site.pageMarker)) {
+    throw new Error(`${site.name}: response missing expected marker "${site.pageMarker}"`);
   }
   const challenge = CHALLENGE_MARKERS.find((marker) => lower.includes(marker));
   if (challenge) {
-    throw new Error(`${site}: looks like a bot-challenge page ("${challenge}")`);
+    throw new Error(`${site.name}: looks like a bot-challenge page ("${challenge}")`);
   }
 }
 
-/** Fetch, validate, parse and filter the listings for one (search, source) pair. */
-export async function collectSource(
-  search: SearchConfig,
-  source: SearchSource,
-): Promise<Listing[]> {
-  const adapter = ADAPTERS[source.site];
-  const content = await fetchDirect(source.url, { timeoutMs: adapter.timeoutMs });
-  assertResultsPage(source.site, content);
-  const listings = adapter.parse(content, source.url);
-  return applyFilters(listings, search.filters);
+/**
+ * Fetch, validate and parse every result page of a tracked link.
+ *
+ * All pages or nothing: if any page fails, the whole link is skipped this run. A partial result
+ * set would skew the market comparison and look like listings disappearing.
+ */
+export async function collectListings(url: string): Promise<Listing[]> {
+  const site = siteFor(url);
+  const byKey = new Map<string, Listing>();
+
+  let totalPages = 1;
+  for (let page = 1; page <= Math.min(totalPages, MAX_PAGES); page += 1) {
+    const pageUrl = site.pageUrl(url, page);
+    const content = await fetchDirect(pageUrl, { timeoutMs: site.timeoutMs });
+    assertResultsPage(site, content);
+    const parsed = site.parse(content, url);
+    if (page === 1) totalPages = parsed.totalPages;
+    // A promoted ad can appear on several pages; the first sighting wins.
+    for (const listing of parsed.listings) {
+      if (!byKey.has(listing.key)) byKey.set(listing.key, listing);
+    }
+  }
+
+  if (totalPages > MAX_PAGES) {
+    console.warn(`⚠️  ${url}: ${totalPages} result pages — only the first ${MAX_PAGES} are read`);
+  }
+  return [...byKey.values()];
 }

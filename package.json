@@ -1,9 +1,9 @@
 {
-  "name": "car-search",
+  "name": "listing-tracker",
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "Monitor Egyptian car-listing sites and send a Telegram alert when a new matching car is posted.",
+  "description": "Track Dubizzle Egypt search links and send a Telegram alert, with a market-price verdict, when a new matching ad is posted.",
   "scripts": {
     "start": "tsx src/run.ts",
     "dry-run": "DRY_RUN=1 tsx src/run.ts",

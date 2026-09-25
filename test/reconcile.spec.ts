@@ -1,44 +1,51 @@
 import { describe, expect, it } from 'vitest';
 import { keysToPersist, reconcile } from '../src/reconcile';
-import type { Listing } from '../src/types';
+import type { Match } from '../src/types';
 
-const listing = (key: string): Listing => ({
-  key,
-  title: key,
-  priceEgp: null,
-  url: `https://example.com/${key}`,
-  imageUrl: null,
-  site: 'dubizzle',
+const match = (key: string): Match => ({
+  listing: {
+    key,
+    title: key,
+    priceEgp: null,
+    url: `https://example.com/${key}`,
+    imageUrl: null,
+    description: null,
+    attributes: {},
+  },
+  checks: [],
+  extraCostEgp: 0,
+  possibleExtraCostEgp: 0,
 });
 
+const keysOf = (matches: readonly Match[]): string[] => matches.map((entry) => entry.listing.key);
+
 describe('reconcile', () => {
-  it('seeds silently on the first-ever look (no previous state)', () => {
-    const plan = reconcile(undefined, [listing('a'), listing('b')]);
+  it('seeds on the first-ever look (no previous state), alerting nothing individually', () => {
+    const plan = reconcile(undefined, [match('a'), match('b')]);
     expect(plan.kind).toBe('seed');
     expect(plan.toAlert).toHaveLength(0);
   });
 
   it('alerts only genuinely-new listings in steady state', () => {
-    const plan = reconcile(['a'], [listing('a'), listing('b')]);
+    const plan = reconcile(['a'], [match('a'), match('b')]);
     expect(plan.kind).toBe('diff');
-    expect(plan.toAlert.map((entry) => entry.key)).toEqual(['b']);
+    expect(keysOf(plan.toAlert)).toEqual(['b']);
   });
 
   it('alerts nothing when nothing changed', () => {
-    const plan = reconcile(['a', 'b'], [listing('a'), listing('b')]);
+    const plan = reconcile(['a', 'b'], [match('a'), match('b')]);
     expect(plan.kind).toBe('diff');
     expect(plan.toAlert).toHaveLength(0);
   });
 
   it('still alerts a small genuine burst below the resync threshold', () => {
-    const plan = reconcile(['a'], [listing('a'), listing('b'), listing('c')]);
+    const plan = reconcile(['a'], [match('a'), match('b'), match('c')]);
     expect(plan.kind).toBe('diff');
-    expect(plan.toAlert.map((entry) => entry.key)).toEqual(['b', 'c']);
+    expect(keysOf(plan.toAlert)).toEqual(['b', 'c']);
   });
 
   it('resyncs silently when the entire page looks new (state loss / parser recovery)', () => {
-    const listings = ['a', 'b', 'c', 'd', 'e'].map(listing);
-    const plan = reconcile(['x', 'y'], listings);
+    const plan = reconcile(['x', 'y'], ['a', 'b', 'c', 'd', 'e'].map(match));
     expect(plan.kind).toBe('resync');
     expect(plan.toAlert).toHaveLength(0);
   });

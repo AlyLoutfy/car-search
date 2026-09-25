@@ -1,104 +1,180 @@
-import type { Listing } from '../types';
-import { slugToTitle } from './helpers';
+import type { Listing, ParsedPage } from '../types';
+import { extractAssignedJson, slugToTitle } from './helpers';
 
-// Dubizzle's listing page carries the same result set three times over. We use all three, because
-// each covers a gap in the others:
+// A Dubizzle results page carries its result set three times over, in decreasing richness. We use
+// all three, because each covers a gap in the others:
 //
-// 1. schema.org JSON-LD (<script type="application/ld+json">) — an ItemList of Car objects with
-//    the ad's price, brand, model, year and thumbnail. This is the ONLY place the asking price is
-//    reliably attached to its own ad, so it drives price filtering.
-// 2. Ad cards — <a href="ad/<slug>-ID<id>.html" title="<title>"> — one per visible listing.
-// 3. The analytics arrays "ad_ids":[...] and "ad_ids_set_2":[...] — the COMPLETE, ordered list of
-//    every matching ad id, even ones whose card didn't render. The safety net that guarantees we
-//    never miss a listing.
+// 1. `window.state` — the app state the page hydrates from. Its `algolia.content.hits` hold every
+//    ad on the page in full: price, the seller's description, structured fields (year, mileage,
+//    storage…) with English labels, cover photo, and the total page count. The only source of the
+//    description, which the tax and battery checks read.
+// 2. schema.org JSON-LD — an ItemList with each ad's price, title and thumbnail. Stable because
+//    search engines consume it, so it's the fallback if the app state ever changes shape.
+// 3. The analytics arrays "ad_ids":[...], "ad_ids_set_2":[...], … — every ad id on the page, even
+//    ones neither of the above described. The safety net that guarantees we never miss a listing.
 //
-// One listing per id from the union of all three, keyed on the stable numeric id. An id that only
-// (2) or (3) knows about still becomes a listing — with a null price, which passes the price filter
-// rather than being silently dropped.
+// One listing per id from the union of all three, keyed on the stable numeric id. An id only (3)
+// knows about still becomes a listing, with a null price and description — which every filter lets
+// through, so it is surfaced rather than silently dropped.
 
-const AD_CARD = /\bad\/[^"']*?-ID(\d+)\.html"\s+title="([^"]*)"/gi;
-const AD_CARD_HREF = /\bad\/([^"']*?-ID(\d+)\.html)/gi;
-const AD_IDS_ARRAY = /"ad_ids(?:_set_2)?":\[([^\]]*)\]/gi;
+const SITE = 'https://www.dubizzle.com.eg';
+const AD_IDS_ARRAY = /"ad_ids(?:_set_\d+)?":\[([^\]]*)\]/gi;
 const JSON_LD = /<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
 const ID_IN_URL = /-ID(\d+)\.html/;
 
-/** What the JSON-LD knows about one ad. Any field may be missing on a malformed entry. */
+type Json = Record<string, unknown>;
+
+const isObject = (value: unknown): value is Json =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+const asArray = (value: unknown): unknown[] => (Array.isArray(value) ? value : [value]);
+const asText = (value: unknown): string | undefined =>
+  typeof value === 'string' || typeof value === 'number'
+    ? String(value).trim() || undefined
+    : undefined;
+const asPrice = (value: unknown): number | undefined => {
+  const price = Number(value);
+  return Number.isFinite(price) && price > 0 ? price : undefined;
+};
+
+/**
+ * A Latin display title from the ad's make/model/year ("Seat Leon 2022", "Apple - iPhone 17").
+ *
+ * Deliberately not the seller's own headline: roughly a third of Egyptian ads are titled in Arabic
+ * ("سيات ليون 2024"), and a `titleMustInclude: ["leon"]` filter would drop every one of them.
+ */
+function structuredTitle(parts: ReadonlyArray<string | undefined>): string | undefined {
+  const present = parts.filter(Boolean);
+  return present.length ? present.join(' ') : undefined;
+}
+
+// ── Layer 1: window.state ──────────────────────────────────────────────────────────────────────
+
+interface AppState {
+  readonly listings: Map<string, Listing>;
+  readonly totalPages?: number;
+}
+
+function listingFromHit(hit: Json): Listing | undefined {
+  const id = asText(hit.externalID);
+  if (!id) return undefined;
+
+  const attributes: Record<string, string> = {};
+  for (const field of asArray(hit.formattedExtraFields)) {
+    if (!isObject(field)) continue;
+    const label = asText(field.name_l1);
+    const value = asText(field.formattedValue_l1);
+    if (label && value && field.attribute !== 'price') attributes[label] = value;
+  }
+
+  const extra = isObject(hit.extraFields) ? hit.extraFields : {};
+  const cover = isObject(hit.coverPhoto) ? asText(hit.coverPhoto.id) : undefined;
+  const description = asText(hit.description);
+
+  return {
+    key: `dubizzle:${id}`,
+    title:
+      structuredTitle([attributes.Brand, attributes.Model, attributes.Year]) ??
+      asText(hit.title) ??
+      'Listing',
+    // The hit's top-level `price` is 0 on current pages; the asking price lives in extraFields.
+    priceEgp: asPrice(extra.price) ?? asPrice(hit.price) ?? null,
+    url: `${SITE}/ad/${id}`,
+    imageUrl: cover ? `https://images.dubizzle.com.eg/thumbnails/${cover}-600x450.webp` : null,
+    description: description ?? null,
+    attributes,
+  };
+}
+
+function parseAppState(html: string): AppState {
+  const state = extractAssignedJson(html, 'window.state');
+  const algolia = isObject(state) && isObject(state.algolia) ? state.algolia : undefined;
+  const content = algolia && isObject(algolia.content) ? algolia.content : undefined;
+
+  const listings = new Map<string, Listing>();
+  for (const hit of asArray(content?.hits)) {
+    const listing = isObject(hit) ? listingFromHit(hit) : undefined;
+    if (listing && !listings.has(listing.key)) listings.set(listing.key, listing);
+  }
+
+  const totalPages = Number(content?.nbPages);
+  const known = Number.isInteger(totalPages) && totalPages > 0;
+  return { listings, totalPages: known ? totalPages : undefined };
+}
+
+// ── Layer 2: JSON-LD ───────────────────────────────────────────────────────────────────────────
+
 interface StructuredAd {
   readonly title?: string;
   readonly priceEgp?: number;
   readonly imageUrl?: string;
 }
 
-function asArray(value: unknown): unknown[] {
-  return Array.isArray(value) ? value : [value];
+interface StructuredData {
+  readonly ads: Map<string, StructuredAd>;
+  /** The search's total result count, for estimating pages when the app state is missing. */
+  readonly numberOfItems?: number;
 }
 
-function isCar(node: Record<string, unknown>): boolean {
-  return asArray(node['@type']).includes('Car');
-}
-
-/**
- * Build a Latin display title from the structured brand/model/year.
- *
- * Deliberately NOT the seller's own headline: roughly a third of Egyptian listings are titled in
- * Arabic ("سيات ليون 2024"), and `titleMustInclude: ["leon"]` would drop every one of them. Brand
- * and model are Latin in the JSON-LD even on Arabic-titled ads, so this stays filterable while
- * still reflecting the actual car — unlike a hardcoded make/model, which silently mislabels every
- * listing the moment a second search is added.
- */
-function structuredTitle(node: Record<string, unknown>): string | undefined {
-  const brand = (node.brand as Record<string, unknown> | undefined)?.name;
-  const parts = [brand, node.model, node.vehicleModelDate]
-    .map((part) => (typeof part === 'string' || typeof part === 'number' ? String(part).trim() : ''))
-    .filter(Boolean);
-  return parts.length ? parts.join(' ') : undefined;
-}
-
-/** Walk every JSON-LD block and index the Car entries by their numeric ad id. */
-function parseStructuredAds(html: string): Map<string, StructuredAd> {
-  const byId = new Map<string, StructuredAd>();
+function parseStructuredData(html: string): StructuredData {
+  const ads = new Map<string, StructuredAd>();
+  let numberOfItems: number | undefined;
 
   const visit = (node: unknown): void => {
     if (Array.isArray(node)) {
       node.forEach(visit);
       return;
     }
-    if (typeof node !== 'object' || node === null) return;
-    const record = node as Record<string, unknown>;
+    if (!isObject(node)) return;
 
-    if (isCar(record)) {
-      const offers = (asArray(record.offers)[0] ?? {}) as Record<string, unknown>;
-      const url = typeof offers.url === 'string' ? offers.url : String(record.url ?? '');
-      const id = url.match(ID_IN_URL)?.[1];
-      if (id && !byId.has(id)) {
-        const price = Number(offers.price);
-        const image = record.image;
-        byId.set(id, {
-          title: structuredTitle(record),
-          priceEgp: Number.isFinite(price) && price > 0 ? price : undefined,
-          imageUrl: typeof image === 'string' ? image : undefined,
+    if (node['@type'] === 'ItemList' && typeof node.numberOfItems === 'number') {
+      numberOfItems ??= node.numberOfItems;
+    }
+
+    // Any offered item — a Car on a car search, a Product on a phone search.
+    const offer = asArray(node.offers)[0];
+    if (isObject(offer)) {
+      const id = (asText(offer.url) ?? asText(node.url) ?? '').match(ID_IN_URL)?.[1];
+      if (id && !ads.has(id)) {
+        const brand = isObject(node.brand) ? asText(node.brand.name) : undefined;
+        ads.set(id, {
+          title:
+            structuredTitle([brand, asText(node.model), asText(node.vehicleModelDate)]) ??
+            asText(node.name),
+          priceEgp: asPrice(offer.price),
+          imageUrl: asText(asArray(node.image)[0]),
         });
       }
     }
 
-    Object.values(record).forEach(visit);
+    Object.values(node).forEach(visit);
   };
 
   for (const match of html.matchAll(JSON_LD)) {
     try {
       visit(JSON.parse(match[1] ?? ''));
     } catch {
-      // A single malformed block must not lose the other blocks (or the regex backstops below).
+      // A single malformed block must not lose the other blocks (or the layers around it).
     }
   }
 
-  return byId;
+  return { ads, numberOfItems };
+}
+
+// ── Layer 3: analytics id arrays ───────────────────────────────────────────────────────────────
+
+function parseAdIds(html: string): string[] {
+  const ids: string[] = [];
+  for (const arrayMatch of html.matchAll(AD_IDS_ARRAY)) {
+    for (const idMatch of (arrayMatch[1] ?? '').matchAll(/"(\d+)"/g)) {
+      if (idMatch[1]) ids.push(idMatch[1]);
+    }
+  }
+  return ids;
 }
 
 /**
- * Fallback title for an ad the JSON-LD didn't describe, derived from the search URL we fetched
- * (".../used/seat/model-leon/" → "Seat Leon"). The page is already narrowed to one make/model, so
- * this is accurate — and it keeps the make/model Latin for ads with an Arabic slug.
+ * Fallback title for an ad only the id arrays know about, from the search URL we fetched
+ * (".../used/seat/model-leon/" → "Seat Leon"). The page is already narrowed to that make/model.
  */
 function titleFromSourceUrl(sourceUrl: string | undefined): string | undefined {
   const match = sourceUrl?.match(/\/cars-for-sale\/[a-z-]+\/([a-z0-9-]+)\/model-([a-z0-9-]+)/i);
@@ -107,62 +183,49 @@ function titleFromSourceUrl(sourceUrl: string | undefined): string | undefined {
   return make && model ? slugToTitle(`${make} ${model}`) : undefined;
 }
 
-/** Last-resort title: the year out of the ad slug or card title, appended to whatever we know. */
-function fallbackTitle(
-  base: string | undefined,
-  cardTitle: string | undefined,
-  href: string | undefined,
-): string {
-  const year = href?.match(/-(\d{4})-ID/)?.[1] ?? cardTitle?.match(/\b(?:19|20)\d{2}\b/)?.[0];
-  if (base) return year ? `${base} ${year}` : base;
-  // Nothing structured and no source URL — the seller's own headline beats an empty string.
-  return cardTitle?.trim() || 'Listing';
+/** The URL of page `page` (1-based) of a Dubizzle search. */
+export function dubizzlePageUrl(url: string, page: number): string {
+  const next = new URL(url);
+  if (page <= 1) next.searchParams.delete('page');
+  else next.searchParams.set('page', String(page));
+  return next.toString();
 }
 
 /**
- * Parse Dubizzle listings from the full page HTML.
+ * Parse one Dubizzle results page.
  *
  * `sourceUrl` is the search URL this HTML came from; it supplies the make/model for any ad the
- * structured data missed. Optional so the parser stays usable on a bare fixture.
+ * richer layers missed. Optional so the parser stays usable on a bare fixture.
  */
-export function parseDubizzle(html: string, sourceUrl?: string): Listing[] {
-  const structured = parseStructuredAds(html);
-  const cardTitleById = new Map<string, string>();
-  const cardHrefById = new Map<string, string>();
+export function parseDubizzle(html: string, sourceUrl?: string): ParsedPage {
+  const app = parseAppState(html);
+  const structured = parseStructuredData(html);
+  const adIds = parseAdIds(html);
 
-  for (const match of html.matchAll(AD_CARD)) {
-    const id = match[1];
-    const title = match[2];
-    if (id && title && !cardTitleById.has(id)) cardTitleById.set(id, title);
-  }
-  for (const match of html.matchAll(AD_CARD_HREF)) {
-    const href = match[1];
-    const id = match[2];
-    if (id && href && !cardHrefById.has(id)) cardHrefById.set(id, href);
-  }
-
-  // Union of every id: structured entries and card ids first (ordered as shown), then any id known
-  // only to the analytics arrays.
-  const ids = new Set<string>([...structured.keys(), ...cardHrefById.keys()]);
-  for (const arrayMatch of html.matchAll(AD_IDS_ARRAY)) {
-    for (const idMatch of (arrayMatch[1] ?? '').matchAll(/"(\d+)"/g)) {
-      if (idMatch[1]) ids.add(idMatch[1]);
-    }
-  }
-
+  const byKey = new Map(app.listings);
   const urlTitle = titleFromSourceUrl(sourceUrl);
 
-  return [...ids].map((id) => {
-    const ad = structured.get(id);
-    return {
-      key: `dubizzle:${id}`,
-      title: ad?.title ?? fallbackTitle(urlTitle, cardTitleById.get(id), cardHrefById.get(id)),
-      // Null when the structured data didn't cover this ad. applyFilters lets a null price through,
-      // so an unpriced ad is surfaced for you to check rather than silently filtered away.
+  for (const id of [...structured.ads.keys(), ...adIds]) {
+    const key = `dubizzle:${id}`;
+    if (byKey.has(key)) continue;
+    const ad = structured.ads.get(id);
+    byKey.set(key, {
+      key,
+      title: ad?.title ?? urlTitle ?? 'Listing',
       priceEgp: ad?.priceEgp ?? null,
-      url: `https://www.dubizzle.com.eg/ad/${id}`,
+      url: `${SITE}/ad/${id}`,
       imageUrl: ad?.imageUrl ?? null,
-      site: 'dubizzle',
-    };
-  });
+      description: null,
+      attributes: {},
+    });
+  }
+
+  // Page count: straight from the app state, else estimated from the JSON-LD total and how many ads
+  // this page held (page 1 is always full when there's more than one page).
+  const estimatedPages =
+    structured.numberOfItems && byKey.size
+      ? Math.ceil(structured.numberOfItems / byKey.size)
+      : 1;
+
+  return { listings: [...byKey.values()], totalPages: app.totalPages ?? estimatedPages };
 }
