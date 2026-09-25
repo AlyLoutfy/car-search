@@ -5,14 +5,21 @@ import { dirname } from 'node:path';
 export interface TrackerState {
   readonly url: string;
   readonly keys: string[];
+  /**
+   * The offer fingerprint (see `offerOf`) of each seen key whose seller is known, so the same
+   * offer reposted under a new id is recognised — even after the original ad was taken down.
+   */
+  readonly offers?: Record<string, string>;
 }
 
-/** seen.json shape: { [trackerId]: { url, keys } } */
+/** seen.json shape: { [trackerId]: { url, keys, offers } } */
 export type SeenState = Record<string, TrackerState>;
 
 function isTrackerState(value: unknown): value is TrackerState {
   const entry = value as Partial<TrackerState> | null;
-  return typeof entry?.url === 'string' && Array.isArray(entry.keys);
+  const offersOk =
+    entry?.offers === undefined || (typeof entry.offers === 'object' && entry.offers !== null);
+  return typeof entry?.url === 'string' && Array.isArray(entry.keys) && offersOk;
 }
 
 /**
@@ -44,8 +51,23 @@ export function getSeen(state: SeenState, trackerId: string, url: string): strin
   return entry?.url === url ? entry.keys : undefined;
 }
 
-export function setSeen(state: SeenState, trackerId: string, url: string, keys: string[]): void {
-  state[trackerId] = { url, keys };
+/** The recorded offer fingerprints, by key (empty when none, or when the link was edited). */
+export function getOffers(state: SeenState, trackerId: string, url: string): Record<string, string> {
+  const entry = state[trackerId];
+  return entry?.url === url ? (entry.offers ?? {}) : {};
+}
+
+/** Record a tracker's seen keys, keeping only the offers that belong to one of them. */
+export function setSeen(
+  state: SeenState,
+  trackerId: string,
+  url: string,
+  keys: string[],
+  offers: Record<string, string> = {},
+): void {
+  const kept = new Set(keys);
+  const ownOffers = Object.fromEntries(Object.entries(offers).filter(([key]) => kept.has(key)));
+  state[trackerId] = { url, keys, offers: ownOffers };
 }
 
 /** Forget trackers that are no longer configured, so the file doesn't grow forever. */
@@ -61,7 +83,7 @@ export function pruneState(state: SeenState, activeIds: ReadonlySet<string>): vo
  * (oldest-departed first). If the present set alone exceeds the cap, the cap is exceeded
  * rather than dropping a live key (correctness wins over file size).
  */
-export function mergeSeen(previous: string[], currentKeys: string[], cap = 1500): string[] {
+export function mergeSeen(previous: string[], currentKeys: string[], cap = 3000): string[] {
   const currentSet = new Set(currentKeys);
   const departed = previous.filter((key) => !currentSet.has(key)); // no longer on the site
   const budget = Math.max(0, cap - currentKeys.length);

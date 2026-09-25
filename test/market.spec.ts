@@ -12,6 +12,7 @@ function match(key: string, priceEgp: number | null, overrides: Partial<Match> =
       imageUrl: null,
       description: null,
       attributes: { Storage: storage },
+      sellerId: null,
     },
     checks: [],
     extraCostEgp: 0,

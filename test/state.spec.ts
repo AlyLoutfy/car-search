@@ -2,7 +2,15 @@ import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { getSeen, loadState, mergeSeen, pruneState, setSeen, type SeenState } from '../src/state';
+import {
+  getOffers,
+  getSeen,
+  loadState,
+  mergeSeen,
+  pruneState,
+  setSeen,
+  type SeenState,
+} from '../src/state';
 
 const URL_A = 'https://www.dubizzle.com.eg/en/a/';
 const URL_B = 'https://www.dubizzle.com.eg/en/b/';
@@ -27,6 +35,22 @@ describe('getSeen / setSeen', () => {
   });
 });
 
+describe('getOffers / setSeen offers', () => {
+  it('keeps only the offers of keys still recorded', () => {
+    const state: SeenState = {};
+    setSeen(state, 'iphone', URL_A, ['a'], { a: 'x|256 GB|1', evicted: 'y|256 GB|2' });
+    expect(getOffers(state, 'iphone', URL_A)).toEqual({ a: 'x|256 GB|1' });
+  });
+
+  it('has none for a tracker never seen, recorded before offers existed, or whose link changed', () => {
+    const state: SeenState = { old: { url: URL_A, keys: ['a'] } };
+    setSeen(state, 'iphone', URL_A, ['a'], { a: 'x|256 GB|1' });
+    expect(getOffers(state, 'nope', URL_A)).toEqual({});
+    expect(getOffers(state, 'old', URL_A)).toEqual({});
+    expect(getOffers(state, 'iphone', URL_B)).toEqual({});
+  });
+});
+
 describe('loadState', () => {
   it('drops entries in the old per-site shape instead of mis-reading them', () => {
     const path = join(mkdtempSync(join(tmpdir(), 'seen-')), 'seen.json');
@@ -34,10 +58,12 @@ describe('loadState', () => {
       path,
       JSON.stringify({
         'seat-leon': { dubizzle: ['dubizzle:1'], sylndr: ['sylndr:x'] },
-        iphone: { url: URL_B, keys: ['dubizzle:2'] },
+        iphone: { url: URL_B, keys: ['dubizzle:2'], offers: { 'dubizzle:2': 'x|256 GB|1' } },
       }),
     );
-    expect(loadState(path)).toEqual({ iphone: { url: URL_B, keys: ['dubizzle:2'] } });
+    expect(loadState(path)).toEqual({
+      iphone: { url: URL_B, keys: ['dubizzle:2'], offers: { 'dubizzle:2': 'x|256 GB|1' } },
+    });
   });
 
   it('starts empty when the file is missing or corrupt', () => {

@@ -7,14 +7,16 @@ const URL_A = 'https://www.dubizzle.com.eg/en/a/';
 
 const tracker: TrackerConfig = { id: 'leon', label: 'Leon', url: URL_A };
 
-const listing = (id: string): Listing => ({
+/** An ad by its own seller (so never a repost) unless `seller` says otherwise. */
+const listing = (id: string, seller = `seller-${id}`, priceEgp = 1_000_000): Listing => ({
   key: `dubizzle:${id}`,
   title: `Seat Leon ${id}`,
-  priceEgp: 1_000_000,
+  priceEgp,
   url: `https://www.dubizzle.com.eg/ad/${id}`,
   imageUrl: null,
   description: null,
   attributes: {},
+  sellerId: seller,
 });
 
 /** Deps that serve `listings` and record every message sent, failing the ones `fails` picks. */
@@ -92,6 +94,49 @@ describe('trackLink', () => {
     };
     expect((await trackLink(tracker, state, deps)).kind).toBe('failed');
     expect(state.leon).toEqual({ url: URL_A, keys: ['dubizzle:1'] });
+  });
+
+  it('skips a repost of an ad that is still listed, and never alerts it later either', async () => {
+    const state: SeenState = {};
+    await trackLink(tracker, state, fakeDeps([listing('1', 'ahmed', 43000)]).deps); // seed
+
+    const repost = fakeDeps([listing('1', 'ahmed', 43000), listing('2', 'ahmed', 43000)]);
+    const outcome = await trackLink(tracker, state, repost.deps);
+    expect(outcome).toMatchObject({ sent: 0, reposts: 1 });
+    expect(repost.sent).toHaveLength(0);
+    expect(getSeen(state, 'leon', URL_A)).toContain('dubizzle:2');
+  });
+
+  it('skips a repost of an ad that was taken down before being posted again', async () => {
+    const state: SeenState = {};
+    await trackLink(tracker, state, fakeDeps([listing('1', 'ahmed', 43000)]).deps); // seed
+    await trackLink(tracker, state, fakeDeps([listing('9', 'mona')]).deps); // ad 1 deleted
+
+    const bumped = fakeDeps([listing('9', 'mona'), listing('2', 'ahmed', 42500)]);
+    await trackLink(tracker, state, bumped.deps);
+    expect(bumped.sent).toHaveLength(0);
+  });
+
+  it('alerts once when a seller posts the same offer twice in one hour', async () => {
+    const state: SeenState = { leon: { url: URL_A, keys: ['dubizzle:1'] } };
+    const twins = fakeDeps([listing('1'), listing('2', 'ahmed', 43000), listing('3', 'ahmed', 43000)]);
+    await trackLink(tracker, state, twins.deps);
+    expect(twins.sent).toHaveLength(1);
+    expect(getSeen(state, 'leon', URL_A)).toEqual(['dubizzle:1', 'dubizzle:2', 'dubizzle:3']);
+  });
+
+  it('still alerts a different offer from the same seller, e.g. a real price drop', async () => {
+    const state: SeenState = {};
+    await trackLink(tracker, state, fakeDeps([listing('1', 'ahmed', 43000)]).deps); // seed
+    const cheaper = fakeDeps([listing('1', 'ahmed', 43000), listing('2', 'ahmed', 38000)]);
+    await trackLink(tracker, state, cheaper.deps);
+    expect(cheaper.sent).toHaveLength(1);
+  });
+
+  it('lists one ad per offer in the first-run digest', async () => {
+    const { deps, sent } = fakeDeps([listing('1', 'ahmed', 43000), listing('2', 'ahmed', 43000)]);
+    await trackLink(tracker, {}, deps);
+    expect(sent[0]).toContain('1 ad match right now');
   });
 
   it('records a new link even if its digest fails, so it never floods you with alerts later', async () => {

@@ -65,6 +65,11 @@ describe('parseDubizzle — from the app state (window.state)', () => {
     expect(ad?.description).toBeNull();
   });
 
+  it('records who posted the ad, so a repost under a new id can be recognised', () => {
+    expect(byKey('dubizzle:300000001')?.sellerId).toBe('e805712c-c468-4534-8cb5-52ae7231a05f');
+    expect(byKey('dubizzle:300000004')?.sellerId).toBeNull(); // JSON-LD doesn't say
+  });
+
   it('keeps an id only the analytics arrays know about, unpriced rather than dropped', () => {
     expect(byKey('dubizzle:300000005')?.priceEgp).toBeNull();
   });

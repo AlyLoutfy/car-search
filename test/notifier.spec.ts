@@ -17,6 +17,7 @@ const listing: Listing = {
   imageUrl: null,
   description: 'iPhone 17 بطاريه 98% معفي ضريبه',
   attributes: { Storage: '256 GB' },
+  sellerId: null,
 };
 
 const match = (overrides: Partial<Match> = {}, listingOverrides: Partial<Listing> = {}): Match => ({

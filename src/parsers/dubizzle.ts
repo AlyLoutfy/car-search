@@ -82,6 +82,7 @@ function listingFromHit(hit: Json): Listing | undefined {
     imageUrl: cover ? `https://images.dubizzle.com.eg/thumbnails/${cover}-600x450.webp` : null,
     description: description ?? null,
     attributes,
+    sellerId: asText(hit.userExternalID) ?? null,
   };
 }
 
@@ -217,6 +218,7 @@ export function parseDubizzle(html: string, sourceUrl?: string): ParsedPage {
       imageUrl: ad?.imageUrl ?? null,
       description: null,
       attributes: {},
+      sellerId: null,
     });
   }
 
