@@ -1,8 +1,9 @@
 <!doctype html><html><head><title>Seat Leon for sale | dubizzle.com.eg</title>
 
-<!-- Shape copied from a real listings page: an ItemList of ["Product","Car"] entries, each with
-     the ad id inside offers.url, a Latin brand/model even when the seller's headline is Arabic,
-     the asking price, and a thumbnail. This is where price and title now come from. -->
+<!-- A car search page WITHOUT the window.state app blob, exercising the fallback layers.
+     JSON-LD shape copied from a real listings page: an ItemList of ["Product","Car"] entries, each
+     with the ad id inside offers.url, a Latin brand/model even when the seller's headline is
+     Arabic, the asking price, and a thumbnail. -->
 <script type="application/ld+json">
 {"@context":"https://schema.org","@type":"SearchResultsPage","inLanguage":"en",
  "mainEntity":{"@type":"ItemList","numberOfItems":4,"itemListElement":[
@@ -44,7 +45,7 @@
   <div aria-label="Price">980,000 EGP</div>
   <a href="ad/seat-leon-2023-ID208555001.html" title="Seat Leon 2023 top line"><div></div></a>
   <div aria-label="Price">2,400,000 EGP</div>
-  <!-- Card present, but absent from the JSON-LD: exercises the fallback title path. -->
+  <!-- Card present, but absent from the JSON-LD: only the ad_ids arrays below vouch for it. -->
   <a href="ad/seat-leon-2019-ID208777777.html" title="Seat Leon 2019"><div></div></a>
 </div>
 <script id="analytics">window.dataLayer.push({"event":"search","filter_name":"Search Hits Count","filter_value":6,"ad_ids":["208239498","208274361","208149106","208555001","208777777","208999999"],"ad_ids_set_2":[]});</script>

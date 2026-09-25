@@ -1,19 +1,58 @@
+import { mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { getSeen, mergeSeen, setSeen, type SeenState } from '../src/state';
+import { getSeen, loadState, mergeSeen, pruneState, setSeen, type SeenState } from '../src/state';
+
+const URL_A = 'https://www.dubizzle.com.eg/en/a/';
+const URL_B = 'https://www.dubizzle.com.eg/en/b/';
 
 describe('getSeen / setSeen', () => {
-  it('returns undefined for a (search, site) never recorded (first-run signal)', () => {
-    const state: SeenState = {};
-    expect(getSeen(state, 'seat-leon', 'dubizzle')).toBeUndefined();
+  it('returns undefined for a tracker never recorded (first-run signal)', () => {
+    expect(getSeen({}, 'seat-leon', URL_A)).toBeUndefined();
   });
 
-  it('round-trips recorded keys', () => {
+  it('round-trips recorded keys; an empty array means "seen, nothing there"', () => {
     const state: SeenState = {};
-    setSeen(state, 'seat-leon', 'dubizzle', ['a', 'b']);
-    expect(getSeen(state, 'seat-leon', 'dubizzle')).toEqual(['a', 'b']);
-    // An empty array is "seen, nothing there" — distinct from undefined (never looked).
-    setSeen(state, 'seat-leon', 'sylndr', []);
-    expect(getSeen(state, 'seat-leon', 'sylndr')).toEqual([]);
+    setSeen(state, 'seat-leon', URL_A, ['a', 'b']);
+    expect(getSeen(state, 'seat-leon', URL_A)).toEqual(['a', 'b']);
+    setSeen(state, 'iphone', URL_B, []);
+    expect(getSeen(state, 'iphone', URL_B)).toEqual([]);
+  });
+
+  it('treats an edited link as a new search, so it is re-seeded rather than diffed', () => {
+    const state: SeenState = {};
+    setSeen(state, 'seat-leon', URL_A, ['a']);
+    expect(getSeen(state, 'seat-leon', URL_B)).toBeUndefined();
+  });
+});
+
+describe('loadState', () => {
+  it('drops entries in the old per-site shape instead of mis-reading them', () => {
+    const path = join(mkdtempSync(join(tmpdir(), 'seen-')), 'seen.json');
+    writeFileSync(
+      path,
+      JSON.stringify({
+        'seat-leon': { dubizzle: ['dubizzle:1'], sylndr: ['sylndr:x'] },
+        iphone: { url: URL_B, keys: ['dubizzle:2'] },
+      }),
+    );
+    expect(loadState(path)).toEqual({ iphone: { url: URL_B, keys: ['dubizzle:2'] } });
+  });
+
+  it('starts empty when the file is missing or corrupt', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'seen-'));
+    expect(loadState(join(dir, 'missing.json'))).toEqual({});
+    writeFileSync(join(dir, 'bad.json'), '{not json');
+    expect(loadState(join(dir, 'bad.json'))).toEqual({});
+  });
+});
+
+describe('pruneState', () => {
+  it('forgets trackers that are no longer configured', () => {
+    const state: SeenState = { keep: { url: URL_A, keys: [] }, gone: { url: URL_B, keys: [] } };
+    pruneState(state, new Set(['keep']));
+    expect(Object.keys(state)).toEqual(['keep']);
   });
 });
 

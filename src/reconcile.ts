@@ -1,35 +1,35 @@
-import type { Listing } from './types';
+import type { Match } from './types';
 
 export type ReconcileKind = 'seed' | 'diff' | 'resync';
 
 export interface ReconcilePlan {
   /**
-   * - `seed`   — first time we've ever looked at this (search, site): record silently.
+   * - `seed`   — first time we've looked at this link: record without per-listing alerts.
    * - `resync` — the whole page suddenly looks new (state loss / parser recovery / redesign):
-   *              re-record silently instead of blasting the user with a page of stale cars.
+   *              re-record silently instead of blasting the user with a page of stale ads.
    * - `diff`   — normal case: alert the genuinely-new listings.
    */
   readonly kind: ReconcileKind;
-  /** Listings to alert on (empty for `seed` and `resync`). */
-  readonly toAlert: readonly Listing[];
+  /** Matches to alert on (empty for `seed` and `resync`). */
+  readonly toAlert: readonly Match[];
 }
 
 export interface ReconcileOptions {
   /**
-   * If at least this many listings are present AND every one of them looks new, assume the
+   * If at least this many matches are present AND every one of them looks new, assume the
    * "new"-ness is an artifact (lost state, recovered parser) rather than reality, and resync
-   * silently instead of alerting. Genuine bursts (a few new cars among known ones) are unaffected.
+   * silently instead of alerting. Genuine bursts (a few new ads among known ones) are unaffected.
    */
   readonly resyncThreshold?: number;
 }
 
 /**
- * Decide what to do for one (search, site) given the previously-seen keys and the listings
- * found this run. Pure function — no I/O — so the alert/seed/resync policy is unit-testable.
+ * Decide what to do for one tracker given the previously-seen keys and the matches found this
+ * run. Pure function — no I/O — so the alert/seed/resync policy is unit-testable.
  */
 export function reconcile(
   previousKeys: readonly string[] | undefined,
-  listings: readonly Listing[],
+  matches: readonly Match[],
   options: ReconcileOptions = {},
 ): ReconcilePlan {
   const resyncThreshold = options.resyncThreshold ?? 4;
@@ -39,9 +39,9 @@ export function reconcile(
   }
 
   const previousSet = new Set(previousKeys);
-  const fresh = listings.filter((listing) => !previousSet.has(listing.key));
+  const fresh = matches.filter((match) => !previousSet.has(match.listing.key));
 
-  if (fresh.length >= resyncThreshold && fresh.length === listings.length) {
+  if (fresh.length >= resyncThreshold && fresh.length === matches.length) {
     return { kind: 'resync', toAlert: [] };
   }
 

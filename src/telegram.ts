@@ -1,7 +1,11 @@
 import type { AppEnv } from './config';
 
 /** Send an HTML-formatted message to the configured Telegram chat via the Bot API. */
-export async function sendTelegramMessage(env: AppEnv, html: string): Promise<void> {
+export async function sendTelegramMessage(
+  env: AppEnv,
+  html: string,
+  options: { preview?: boolean } = {},
+): Promise<void> {
   const response = await fetch(
     `https://api.telegram.org/bot${env.telegramBotToken}/sendMessage`,
     {
@@ -11,7 +15,7 @@ export async function sendTelegramMessage(env: AppEnv, html: string): Promise<vo
         chat_id: env.telegramChatId,
         text: html,
         parse_mode: 'HTML',
-        disable_web_page_preview: false,
+        disable_web_page_preview: options.preview === false,
       }),
     },
   );

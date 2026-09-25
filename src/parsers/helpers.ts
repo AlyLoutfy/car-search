@@ -1,31 +1,3 @@
-import { createHash } from 'node:crypto';
-
-/**
- * Parse an Egyptian price out of free text. Matches "1,350,000 EGP", "EGP 1,350,000",
- * or a bare 6+ digit number. Returns the FIRST price found (the asking price on a card,
- * not the smaller monthly-installment figure that may follow it).
- */
-export function parsePriceEgp(text: string): number | null {
-  const match = text.match(
-    /(\d{1,3}(?:,\d{3})+|\d{6,})\s*EGP|EGP\s*(\d{1,3}(?:,\d{3})+|\d{6,})/i,
-  );
-  if (!match) return null;
-  const digits = (match[1] ?? match[2] ?? '').replace(/,/g, '');
-  const value = Number.parseInt(digits, 10);
-  return Number.isFinite(value) ? value : null;
-}
-
-/** Find the price nearest to a given index by scanning a window around it. */
-export function nearestPrice(
-  markdown: string,
-  index: number,
-  before = 220,
-  after = 520,
-): number | null {
-  const window = markdown.slice(Math.max(0, index - before), index + after);
-  return parsePriceEgp(window);
-}
-
 /** Turn a URL slug ("seat-leon-2020") into a display title ("Seat Leon 2020"). */
 export function slugToTitle(slug: string): string {
   return slug
@@ -35,7 +7,42 @@ export function slugToTitle(slug: string): string {
     .replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
-/** Short, stable hash for building a dedup key when no stable listing URL is available. */
-export function hashKey(...parts: ReadonlyArray<string | number | null>): string {
-  return createHash('sha1').update(parts.map((part) => String(part)).join('|')).digest('hex').slice(0, 16);
+/**
+ * Pull the object literal assigned in an inline script (`window.state = {...};`) out of page HTML.
+ *
+ * The literal is followed by more script on the same line, so we can't just parse "to the end":
+ * this walks the braces, skipping over string contents, to find where the object closes. Returns
+ * undefined when the assignment is missing or doesn't parse — callers fall back to other data.
+ */
+export function extractAssignedJson(html: string, variable: string): unknown {
+  const assignment = html.indexOf(`${variable} =`);
+  if (assignment < 0) return undefined;
+  const start = html.indexOf('{', assignment);
+  if (start < 0) return undefined;
+
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  for (let index = start; index < html.length; index += 1) {
+    const char = html[index];
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (char === '\\') escaped = true;
+      else if (char === '"') inString = false;
+    } else if (char === '"') {
+      inString = true;
+    } else if (char === '{') {
+      depth += 1;
+    } else if (char === '}') {
+      depth -= 1;
+      if (depth === 0) {
+        try {
+          return JSON.parse(html.slice(start, index + 1));
+        } catch {
+          return undefined;
+        }
+      }
+    }
+  }
+  return undefined;
 }

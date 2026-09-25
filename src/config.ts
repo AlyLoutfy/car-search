@@ -2,33 +2,56 @@ import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
-import type { SearchConfig } from './types';
+import { siteFor } from './sources';
+import type { TrackerConfig } from './types';
 
-const siteSchema = z.enum(['dubizzle', 'sylndr']);
+const trackerSchema = z
+  .object({
+    id: z.string().min(1),
+    label: z.string().min(1),
+    url: z
+      .string()
+      .url()
+      .refine(
+        (url) => {
+          try {
+            siteFor(url);
+            return true;
+          } catch {
+            return false;
+          }
+        },
+        (url) => ({ message: `unsupported site: ${url}` }),
+      ),
+    filters: z
+      .object({
+        priceMin: z.number().positive().optional(),
+        priceMax: z.number().positive().optional(),
+        titleMustInclude: z.array(z.string()).optional(),
+        minBatteryHealth: z.number().min(1).max(100).optional(),
+      })
+      .strict()
+      .optional(),
+    phoneTaxEgp: z.number().nonnegative().optional(),
+    details: z.array(z.string()).optional(),
+    compareBy: z.array(z.string()).optional(),
+  })
+  // Reject unknown keys: a typo ("minBateryHealth") fails loudly instead of silently not filtering.
+  .strict();
 
-const searchSchema = z.object({
-  id: z.string().min(1),
-  label: z.string().min(1),
-  sources: z
-    .array(z.object({ site: siteSchema, url: z.string().url() }))
-    .min(1),
-  filters: z
-    .object({
-      priceMin: z.number().positive().optional(),
-      priceMax: z.number().positive().optional(),
-      titleMustInclude: z.array(z.string()).optional(),
-    })
-    .optional(),
-});
-
-const searchesSchema = z.array(searchSchema).min(1);
+const trackersSchema = z
+  .array(trackerSchema)
+  .min(1)
+  .refine((trackers) => new Set(trackers.map((tracker) => tracker.id)).size === trackers.length, {
+    message: 'tracker ids must be unique — the id is the key the seen-state is stored under',
+  });
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
-export function loadSearches(path = resolve(repoRoot, 'config/searches.json')): SearchConfig[] {
+export function loadTrackers(path = resolve(repoRoot, 'config/trackers.json')): TrackerConfig[] {
   const raw = readFileSync(path, 'utf8');
   const parsed: unknown = JSON.parse(raw);
-  return searchesSchema.parse(parsed);
+  return trackersSchema.parse(parsed);
 }
 
 export interface AppEnv {
