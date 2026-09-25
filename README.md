@@ -41,6 +41,10 @@ GitHub Actions cron (hourly)
 - **No duplicate alerts.** `state/seen.json` remembers every ad already seen (by Dubizzle's stable ad
   ID), and the Action commits it back after each run. An ad is only marked seen once its alert was
   actually delivered, so a transient Telegram failure is retried next run instead of dropped.
+- **No repost alerts.** Sellers bump an ad by posting it again under a new ID. The tracker also
+  remembers who posted each ad, for which variant (`compareBy`) and at what price. A "new" ad from
+  the same seller, for the same variant, within 5% of a price already seen is recorded without an
+  alert, even if the original was taken down first. A real price drop still alerts.
 - **No spam on breakage.** A failed fetch or a bot-challenge page is detected and skipped (state
   untouched, retried next run) instead of being mistaken for "zero ads". If a whole page suddenly
   looks new (state loss, a parser recovering after a site redesign), it's re-recorded silently.
@@ -185,6 +189,7 @@ src/
   signals.ts             reads tax status and battery health out of ad descriptions
   filters.ts             price / keyword / battery filters; adds tax owed to the total cost
   market.ts              median, rank and verdict against the other matching ads
+  reposts.ts             recognises the same offer re-posted under a new ad ID
   reconcile.ts           pure seed/diff/resync + persist-on-delivery logic
   state.ts               load/save/merge seen.json (dedup memory; never evicts live keys)
   notifier.ts            Telegram message formatting (alerts + first-run digest)

@@ -18,8 +18,16 @@ permissions:
 jobs:
   check:
     runs-on: ubuntu-latest
+    # Every network call has its own timeout; this is only a backstop against a hung runner.
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v5
+        with:
+          # The branch's CURRENT tip, not the commit this run was triggered on. GitHub sometimes
+          # fires the same schedule twice; the concurrency group makes the second wait, but by
+          # default it would then check out the pre-first-run commit — without the first run's
+          # state/seen.json — and re-send every alert the first run just sent (seen 2026-07-20).
+          ref: ${{ github.ref }}
 
       - uses: actions/setup-node@v5
         with:

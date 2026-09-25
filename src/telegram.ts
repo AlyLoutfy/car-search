@@ -17,6 +17,9 @@ export async function sendTelegramMessage(
         parse_mode: 'HTML',
         disable_web_page_preview: options.preview === false,
       }),
+      // A hung request would stall the job until GitHub kills it, and a killed job never saves the
+      // alerts it already sent — so they'd all go out again next run.
+      signal: AbortSignal.timeout(30_000),
     },
   );
 

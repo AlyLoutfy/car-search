@@ -11,6 +11,7 @@ function listing(overrides: Partial<Listing>): Listing {
     imageUrl: null,
     description: null,
     attributes: {},
+    sellerId: null,
     ...overrides,
   };
 }

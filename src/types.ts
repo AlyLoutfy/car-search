@@ -10,6 +10,8 @@ export interface Listing {
   readonly description: string | null;
   /** The ad's structured fields by English label, e.g. { Year: '2022', Storage: '256 GB' }. */
   readonly attributes: Readonly<Record<string, string>>;
+  /** The site's id for whoever posted the ad, when the page says — used to spot reposts. */
+  readonly sellerId: string | null;
 }
 
 /** Everything one results page yielded. */

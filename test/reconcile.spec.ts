@@ -11,6 +11,7 @@ const match = (key: string): Match => ({
     imageUrl: null,
     description: null,
     attributes: {},
+    sellerId: null,
   },
   checks: [],
   extraCostEgp: 0,
