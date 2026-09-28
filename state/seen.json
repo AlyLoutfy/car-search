@@ -39,8 +39,12 @@
       "dubizzle:209091226",
       "dubizzle:208961768",
       "dubizzle:208840503",
+      "dubizzle:209073077",
       "dubizzle:207249120",
       "dubizzle:208996959",
+      "dubizzle:209100585",
+      "dubizzle:209100052",
+      "dubizzle:209099814",
       "dubizzle:209097454",
       "dubizzle:209094544",
       "dubizzle:209087723",
@@ -49,7 +53,6 @@
       "dubizzle:209078060",
       "dubizzle:209075351",
       "dubizzle:209073705",
-      "dubizzle:209073077",
       "dubizzle:209068059",
       "dubizzle:209063239",
       "dubizzle:209058139",
@@ -232,7 +235,10 @@
       "dubizzle:209091226": "febf9263f971|256 GB|56000",
       "dubizzle:209094544": "febf9263f971|256 GB|56000",
       "dubizzle:209097454": "b624994d1a1d|256 GB|43000",
-      "dubizzle:208960057": "d3b3ad74e017|256 GB|45000"
+      "dubizzle:208960057": "d3b3ad74e017|256 GB|45000",
+      "dubizzle:209100585": "25f5e52a55b6|256 GB|43500",
+      "dubizzle:209100052": "d5a82a89641b|256 GB|63000",
+      "dubizzle:209099814": "0ac79c5bd1ae|256 GB|69000"
     }
   }
 }
